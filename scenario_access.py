@@ -46,8 +46,12 @@ def haversine(lat1, lon1, lat2, lon2) -> Tuple[np.ndarray, np.ndarray]:
 	c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 	return R * c, c
 
-def calculate_degree(lon1, lat1, lon2, lat2):
-	return np.degrees(np.arctan2(lon2 - lon1, lat2 - lat1))
+def get_bearing(lat1, lon1, lat2, lon2):
+    dLon = np.radians(lon2 - lon1)
+    y = np.sin(dLon) * np.cos(np.radians(lat2))
+    x = np.cos(np.radians(lat1)) * np.sin(np.radians(lat2)) - \
+        np.sin(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.cos(dLon)
+    return np.degrees(np.arctan2(y, x))
 
 def load_scenario(scenario_index: int, data_root: Path | str = "Position", return_pwr: bool = True,N_PWR:int=64) -> pd.DataFrame:
 	"""Load and process the scenario CSV for a deepsense scenario.
@@ -74,7 +78,9 @@ def load_scenario(scenario_index: int, data_root: Path | str = "Position", retur
 
 	# Convert time_stamp to datetime
 	scenario_df["time_stamp"] = pd.to_datetime(scenario_df["time_stamp"], format='%H:%M:%S-%f')
-
+	# Fill NaN values by interpolating based on before and after rows (linear interpolation)
+	# Axis=0 for row-wise interpolation; limit_direction='both' fills NaNs at start/end if possible
+	scenario_df.interpolate(method='linear', axis=0, limit_direction='both',inplace=True)
 	# Convert unit2_DGPS to 0/1 if it is not already
 	if "unit2_DGPS" in scenario_df.columns:
 		scenario_df["unit2_DGPS"] = scenario_df["unit2_DGPS"].map({"Yes": 1, "No": 0,1:1,0:0})
@@ -84,16 +90,27 @@ def load_scenario(scenario_index: int, data_root: Path | str = "Position", retur
 	# Extract locations for unit1 and unit2
 	scenario_df[["unit1_lat", "unit1_lon"]] = read_lat_lon_from_file(scenario_df["unit1_loc"], root, scenario_index)
 	scenario_df[["unit2_lat", "unit2_lon"]] = read_lat_lon_from_file(scenario_df["unit2_loc"], root, scenario_index)
-	
-	
-	
-	# Fill NaN values by interpolating based on before and after rows (linear interpolation)
-	# Axis=0 for row-wise interpolation; limit_direction='both' fills NaNs at start/end if possible
-	scenario_df.interpolate(method='linear', axis=0, limit_direction='both',inplace=True)
+
+	scenario_df["bearing"] = get_bearing(scenario_df["unit1_lat"], scenario_df["unit1_lon"], scenario_df["unit2_lat"], scenario_df["unit2_lon"])
+
+	scenario_df["unit1_unit2_distance"] = haversine(
+		scenario_df["unit1_lat"],
+		scenario_df["unit1_lon"],
+		scenario_df["unit2_lat"],
+		scenario_df["unit2_lon"],
+	)[0]
+
+	scenario_df["unit2_lat_prev"] = scenario_df["unit2_lat"].shift(1).fillna(scenario_df["unit2_lat"].iloc[0])
+	scenario_df["unit2_lon_prev"] = scenario_df["unit2_lon"].shift(1).fillna(scenario_df["unit2_lon"].iloc[0])
+	scenario_df["unit2_prev_distance"] = haversine(
+		scenario_df["unit2_lat_prev"],
+		scenario_df["unit2_lon_prev"],
+		scenario_df["unit2_lat"],
+		scenario_df["unit2_lon"],
+	)[0]
 
 
-
-	droplist=["index","unit1_rgb","unit1_pwr_60ghz","unit1_loc","unit2_loc","seq_index","time_stamp","unit1_beam","unit1_max_pwr"]
+	droplist=["index","unit1_rgb","unit1_pwr_60ghz","unit1_loc","unit2_loc","time_stamp","unit1_beam","unit1_max_pwr","unit2_lat_prev","unit2_lon_prev"]
 	# Optionally read and append power features (pwr_0..pwr_63) from unit1_pwr_60ghz
 	pwr_arr = read_pwr_from_file(scenario_df["unit1_pwr_60ghz"], root, scenario_index)[:,[i*64//N_PWR for i in range(N_PWR)]]
 
