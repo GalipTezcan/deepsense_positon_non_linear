@@ -108,7 +108,7 @@ def load_scenario(scenario_index: int, data_root: Path | str = "Position", retur
 		scenario_df["unit2_lat"],
 		scenario_df["unit2_lon"],
 	)[0]
-
+	scenario_df["direction"]=scenario_df["seq_index"].map({1:0,2:1,3:0,4:0,5:1,6:0,7:0,8:1,10:1,11:0,13:0,14:1,16:0,17:1})
 
 	droplist=["index","unit1_rgb","unit1_pwr_60ghz","unit1_loc","unit2_loc","time_stamp","unit1_beam","unit1_max_pwr","unit2_lat_prev","unit2_lon_prev"]
 	# Optionally read and append power features (pwr_0..pwr_63) from unit1_pwr_60ghz
