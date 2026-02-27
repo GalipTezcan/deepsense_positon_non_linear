@@ -122,6 +122,7 @@ def load_scenario(scenario_index: int, data_root: Path | str = "Position", retur
 	else:
 			scenario_df["unit1_beam_index"]=pwr_arr.argmax(axis=1)
 	
+	scenario_df["unit1_beam_index_f"]=scenario_df["unit1_beam_index"].copy().astype(float)
 	scenario_df.dropna(axis=1, how='all',inplace=True)
 	for col in ["unit2_sat_used","unit2_fix_type","unit1_lidar","unit1_lidar_SCR","unit1_radar","unit2_loc_cal"]:
 		if col in scenario_df.columns:
